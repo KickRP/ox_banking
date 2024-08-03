@@ -90,14 +90,11 @@ if (luaClientFile) {
   writeFile('dist/client.lua', luaClientFile);
 }
 
-if (production) {
-  await exec('cd ./src/web && vite build');
-  let files = [...(await getFiles('dist/web')), ...(await getFiles('locales')), ...(await getFiles('data'))];
+if (web) await exec(`cd ./src/web && vite ${production ? 'build' : 'build --watch'}`);
 
-  fxmanifest += `
-files {\n    '${files.join("',\n    '")}',
-}`;
-}
+const files = await getFiles('dist/web', 'data', 'locales');
+
+fxmanifest += `\nfiles {\n\t'${files.join("',\n\t'")}',\n}`;
 
 writeFile('.yarn.installed', new Date().toISOString());
 writeFile('fxmanifest.lua', fxmanifest);
