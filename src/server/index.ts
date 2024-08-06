@@ -66,6 +66,7 @@ onClientCallback('ox_banking:depositMoney', async (playerId, { accountId, amount
 });
 
 onClientCallback('ox_banking:withdrawMoney', async (playerId, { accountId, amount }: UpdateBalance) => {
+  console.log(accountId, amount);
   const response = await Ox.WithdrawMoney(playerId, accountId, amount);
   //@todo notify
   return response === true;
@@ -109,8 +110,8 @@ onClientCallback('ox_banking:getDashboardData', async (playerId): Promise<Dashbo
     `
     SELECT
       DAYNAME(d.date) as day,
-      COALESCE(SUM(CASE WHEN at.toId = ? THEN at.amount ELSE 0 END), 0) as income,
-      COALESCE(SUM(CASE WHEN at.fromId = ? THEN at.amount ELSE 0 END), 0) as expenses
+      CAST(COALESCE(SUM(CASE WHEN at.toId = ? THEN at.amount ELSE 0 END), 0) AS UNSIGNED) as income,
+      CAST(COALESCE(SUM(CASE WHEN at.fromId = ? THEN at.amount ELSE 0 END), 0) AS UNSIGNED) as expenses
     FROM (
       SELECT CURDATE() as date
       UNION ALL SELECT DATE_SUB(CURDATE(), INTERVAL 1 DAY)
@@ -140,7 +141,7 @@ onClientCallback('ox_banking:getDashboardData', async (playerId): Promise<Dashbo
     SELECT amount, DATE_FORMAT(date, '%Y-%m-%d %H:%i') as date, toId, fromId, message
     FROM accounts_transactions
     WHERE toId = ? OR fromId = ?
-    ORDER BY date DESC
+    ORDER BY id DESC
     LIMIT 5
     `,
     [account.id, account.id]
