@@ -1,4 +1,5 @@
 import { OxAccountPermissions, OxAccountRoles } from '@overextended/ox_core';
+import { DateRange } from 'react-day-picker';
 
 export type AccountRole = OxAccountRoles;
 export type AccountPermissions = OxAccountPermissions;
@@ -35,3 +36,25 @@ export interface AccessTableData {
   numberOfPages: number;
   users: AccessTableUser[];
 }
+
+export interface RawLogItem {
+  id: number;
+  toId: number;
+  name: string;
+  message: string;
+  amount: number;
+  date: string;
+  fromBalance?: number;
+  toBalance?: number;
+}
+
+export type LogItem = RawLogItem & {
+  type: 'inbound' | 'outbound';
+  newBalance: number;
+};
+
+export type LogsFilters = {
+  search: string;
+  page: number;
+  date?: DateRange;
+};

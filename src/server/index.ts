@@ -1,5 +1,5 @@
 import { onClientCallback } from '@overextended/ox_lib/server';
-import type { AccessTableData, Account, DashboardData, Transaction } from '../common/typings';
+import type { AccessTableData, Account, DashboardData, LogsFilters, RawLogItem, Transaction } from '../common/typings';
 import { oxmysql } from '@overextended/oxmysql';
 import { Ox, GetPlayer } from '@overextended/ox_core/server';
 
@@ -320,4 +320,59 @@ onClientCallback('ox_banking:convertAccountToShared', async (playerId, data: { a
   await oxmysql.prepare('UPDATE `accounts` SET `type` = ? WHERE `id` = ?', ['shared', data.accountId]);
 
   return true;
+});
+
+onClientCallback('ox_banking:getLogs', async (playerId, data: { accountId: number; filters: LogsFilters }) => {
+  const player = GetPlayer(playerId);
+
+  if (!player) return;
+
+  const hasPermission = await player.hasAccountPermission(data.accountId, 'viewHistory');
+
+  if (!hasPermission) return;
+
+  const { accountId, filters } = data;
+
+  const search = `%${filters.search}%`;
+
+  let dateSearchString = '';
+  let queryParams: any[] = [accountId, accountId, search, search];
+
+  if (filters.date) {
+    // Dates from filters are all set to midnight, so we set all the dates we fetch from the DB to be 1 minute after
+    // midnight to fit into the BETWEEN scope
+    dateSearchString = `AND (DATE_FORMAT(ac.date, '%Y-%m-%dT00:01.000Z') BETWEEN ? AND ?)`;
+    console.log(JSON.stringify(filters.date, null, 2));
+    queryParams.push(filters.date.from, filters.date.to ?? filters.date.from);
+  }
+
+  queryParams.push(filters.page * 9);
+
+  const queryData = await oxmysql.rawExecute<RawLogItem[]>(
+    `
+          SELECT ac.id, ac.toId, ac.fromBalance, ac.toBalance, ac.message, ac.amount, DATE_FORMAT(ac.date, '%Y-%m-%d %H:%i') AS date, CONCAT(c.firstName, ' ', c.lastName) AS name
+          FROM accounts_transactions ac
+          LEFT JOIN characters c ON c.charId = ac.actorId
+          WHERE (fromId = ? OR toId = ?) AND (ac.message LIKE ? OR CONCAT(c.firstName, ' ', c.lastName) LIKE ?) ${dateSearchString}
+          ORDER BY ac.id DESC
+          LIMIT 9
+          OFFSET ?
+        `,
+    queryParams
+  );
+
+  const totalLogsCount = await oxmysql.prepare(
+    `
+          SELECT COUNT(*)
+          FROM accounts_transactions ac
+          LEFT JOIN characters c ON c.charId = ac.actorId
+          WHERE (ac.toId = ? OR ac.fromId = ?) AND (ac.message LIKE ? OR CONCAT(c.firstName, ' ', c.lastName) LIKE ?)
+        `,
+    [accountId, accountId, search, search]
+  );
+
+  return {
+    numberOfPages: Math.ceil(totalLogsCount / 9),
+    logs: queryData,
+  };
 });
