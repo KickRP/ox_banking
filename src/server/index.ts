@@ -338,13 +338,36 @@ onClientCallback('ox_banking:getLogs', async (playerId, data: { accountId: numbe
   let dateSearchString = '';
   let queryParams: any[] = [accountId, accountId, search, search];
 
-  if (filters.date) {
-    // Dates from filters are all set to midnight, so we set all the dates we fetch from the DB to be 1 minute after
-    // midnight to fit into the BETWEEN scope
-    dateSearchString = `AND (DATE_FORMAT(ac.date, '%Y-%m-%dT00:01.000Z') BETWEEN ? AND ?)`;
-    console.log(JSON.stringify(filters.date, null, 2));
-    queryParams.push(filters.date.from, filters.date.to ?? filters.date.from);
+  let typeQueryString = ``;
+
+  if (filters.type && filters.type !== 'combined') {
+    typeQueryString += 'AND (';
+    filters.type === 'outbound' ? (typeQueryString += 'fromId = ?)') : (typeQueryString += 'toId = ?)');
+
+    queryParams.push(accountId);
   }
+
+  if (filters.date) {
+    const rawDates = {
+      from: new Date(filters.date.from),
+      to: new Date(filters.date.to ?? filters.date.from),
+    };
+
+    const formattedDates = {
+      from: new Date(
+        Date.UTC(rawDates.from.getFullYear(), rawDates.from.getMonth(), rawDates.from.getDate(), 0, 0, 0)
+      ).toISOString(),
+      to: new Date(
+        Date.UTC(rawDates.to.getFullYear(), rawDates.to.getMonth(), rawDates.to.getDate(), 23, 59, 59)
+      ).toISOString(),
+    };
+
+    dateSearchString = `AND (DATE(ac.date) BETWEEN ? AND ?)`;
+    queryParams.push(formattedDates.from, formattedDates.to);
+  }
+
+  const queryWhere = `WHERE (fromId = ? OR toId = ?) AND (ac.message LIKE ? OR CONCAT(c.firstName, ' ', c.lastName) LIKE ?) ${typeQueryString} ${dateSearchString}`;
+  const countQueryParams = [...queryParams];
 
   queryParams.push(filters.page * 9);
 
@@ -353,7 +376,7 @@ onClientCallback('ox_banking:getLogs', async (playerId, data: { accountId: numbe
           SELECT ac.id, ac.toId, ac.fromBalance, ac.toBalance, ac.message, ac.amount, DATE_FORMAT(ac.date, '%Y-%m-%d %H:%i') AS date, CONCAT(c.firstName, ' ', c.lastName) AS name
           FROM accounts_transactions ac
           LEFT JOIN characters c ON c.charId = ac.actorId
-          WHERE (fromId = ? OR toId = ?) AND (ac.message LIKE ? OR CONCAT(c.firstName, ' ', c.lastName) LIKE ?) ${dateSearchString}
+          ${queryWhere}
           ORDER BY ac.id DESC
           LIMIT 9
           OFFSET ?
@@ -366,9 +389,9 @@ onClientCallback('ox_banking:getLogs', async (playerId, data: { accountId: numbe
           SELECT COUNT(*)
           FROM accounts_transactions ac
           LEFT JOIN characters c ON c.charId = ac.actorId
-          WHERE (ac.toId = ? OR ac.fromId = ?) AND (ac.message LIKE ? OR CONCAT(c.firstName, ' ', c.lastName) LIKE ?)
+          ${queryWhere}
         `,
-    [accountId, accountId, search, search]
+    countQueryParams
   );
 
   return {
