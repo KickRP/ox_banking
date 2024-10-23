@@ -1,16 +1,19 @@
-import React from 'react';
+import { useModal } from '@/components/ModalsProvider';
+import SpinningLoader from '@/components/SpinningLoader';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import * as z from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { fetchNui } from '@/utils/fetchNui';
-import { useModal } from '@/components/ModalsProvider';
-import SpinningLoader from '@/components/SpinningLoader';
 import locales from '@/locales';
 import { queryClient } from '@/main';
-import { AccessTableData, AccountRole } from '~/src/common/typings';
+import permissions from '@/permissions';
+import { AccountRole } from '@/typings';
+import { fetchNui } from '@/utils/fetchNui';
+import { zodResolver } from '@hookform/resolvers/zod';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
+import { AccessTableData } from '~/src/common/typings';
+import RolePermissions from '../components/RolePermissions';
 
 interface Props {
   targetStateId: string;
@@ -33,12 +36,13 @@ const ManageUserModal: React.FC<Props> = ({ targetStateId, defaultRole, accountI
     },
   });
 
+  const role = form.watch('role') as AccountRole;
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    const resp = await fetchNui('manageUser', { accountId, targetStateId, values }, { data: true, delay: 1500 });
+    await fetchNui('manageUser', { accountId, targetStateId, values }, { data: true, delay: 1500 });
 
     queryClient.setQueriesData({ queryKey: ['account-access'] }, (data: AccessTableData | undefined) => {
-      console.log(0);
       if (!data) return;
 
       const selectedUserIndex = data.users.findIndex((user) => user.stateId === targetStateId);
@@ -63,6 +67,11 @@ const ManageUserModal: React.FC<Props> = ({ targetStateId, defaultRole, accountI
     modal.close();
   }
 
+  const roles = React.useMemo(
+    () => Object.keys(permissions).filter((role): role is keyof typeof locales => role !== 'owner'),
+    [permissions]
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <Form {...form}>
@@ -77,14 +86,16 @@ const ManageUserModal: React.FC<Props> = ({ targetStateId, defaultRole, accountI
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manager">{locales.manager}</SelectItem>
-                      <SelectItem value="contributor">{locales.contributor}</SelectItem>
+                      {roles.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {locales[role as keyof typeof locales]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </FormControl>
                 <FormDescription>
-                  <p>{locales.contributor_description}</p>
-                  <p>{locales.manager_description}</p>
+                  <RolePermissions role={role} />
                 </FormDescription>
               </FormItem>
             )}

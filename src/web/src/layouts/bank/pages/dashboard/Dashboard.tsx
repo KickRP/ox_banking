@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchNui } from '@/utils/fetchNui';
 import type { DashboardData } from '~/src/common/typings';
 import LoadingDashboard from '@/layouts/bank/pages/dashboard/components/LoadingDashboard';
+import { delay } from '@/utils/misc';
 
 const MOCK_DASHBOARD: DashboardData = {
   balance: 56320,
@@ -54,41 +55,34 @@ const MOCK_DASHBOARD: DashboardData = {
   invoices: [
     {
       amount: 1500,
-      date: '28/10/2023',
-      issuer: 'John Doe',
-      paid: false,
+      label: 'SomeCompany LLC',
+      id: 0,
+      dueDate: Date.now(),
+      status: 'overdue',
     },
     {
-      amount: 8200,
-      date: '28/10/2023',
-      issuer: 'Bobby Smith',
-      paid: false,
+      amount: 5000,
+      label: 'SomeCompany LLC',
+      id: 1,
+      dueDate: Date.now(),
+      paidAt: Date.now(),
+      status: 'paid',
     },
     {
-      amount: 13999,
-      date: '28/10/2023',
-      issuer: 'Michael Jackson',
-      paid: true,
-    },
-    {
-      amount: 300,
-      date: '28/10/2023',
-      issuer: 'Some Body',
-      paid: true,
-    },
-    {
-      amount: 300,
-      date: '28/10/2023',
-      issuer: 'Some Body',
-      paid: true,
+      amount: 5000,
+      label: 'SomeCompany LLC',
+      id: 2,
+      dueDate: Date.now(),
+      paidAt: Date.now(),
+      status: 'unpaid',
     },
   ],
   transactions: [
-    { amount: 1500, message: 'Salary', date: '28/10/2023', type: 'inbound' },
-    { amount: 2900, message: 'Salary', date: '28/10/2023', type: 'inbound' },
-    { amount: 12700, message: 'Withdraw', date: '28/10/2023', type: 'outbound' },
-    { amount: 3500, message: 'Deposit', date: '28/10/2023', type: 'inbound' },
-    { amount: 3500, message: 'Deposit', date: '28/10/2023', type: 'inbound' },
+    { id: 0, amount: 1500, message: 'Salary', date: Date.now(), type: 'inbound' },
+    { id: 1, amount: 2900, message: 'Salary', date: Date.now(), type: 'inbound' },
+    { id: 2, amount: 12700, message: 'Withdraw', date: Date.now(), type: 'outbound' },
+    { id: 3, amount: 3500, message: 'Deposit', date: Date.now(), type: 'inbound' },
+    { id: 4, amount: 3500, message: 'Deposit', date: Date.now(), type: 'inbound' },
   ],
 };
 
@@ -101,6 +95,8 @@ const Dashboard: React.FC = () => {
         data: MOCK_DASHBOARD,
         delay: 1500,
       });
+
+      await delay(500);
 
       return resp;
     },
@@ -121,27 +117,10 @@ const Dashboard: React.FC = () => {
       </BaseCard>
       <div className="flex flex-1 gap-2">
         <BaseCard title={locales.recent_transactions} icon={Repeat} className="flex-1">
-          {data.transactions?.map((transaction) => (
-            <TransactionItem
-              key={`${transaction.amount}-${transaction.date}`}
-              amount={transaction.amount}
-              message={transaction.message}
-              date={transaction.date}
-              type={transaction.type}
-            />
-          ))}
+          {data.transactions?.map((transaction) => <TransactionItem key={transaction.id} transaction={transaction} />)}
         </BaseCard>
         <BaseCard title={locales.recent_invoices} icon={FileStack} className="flex-1">
-          {data.invoices?.map((invoice) => (
-            <InvoiceItem
-              // Potentially duplicate key, need to convert date to timestamp
-              key={`${invoice.issuer}-${invoice.date}`}
-              amount={invoice.amount}
-              date={invoice.date}
-              issuer={invoice.issuer}
-              paid={invoice.paid}
-            />
-          ))}
+          {data.invoices?.map((invoice) => <InvoiceItem key={invoice.id} invoice={invoice} />)}
         </BaseCard>
       </div>
     </div>

@@ -1,5 +1,7 @@
+import locales from '@/locales';
+import { formatNumber } from '@/utils/formatNumber';
 import React from 'react';
-import { Bar, LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface Props {
   data?: {
@@ -14,19 +16,28 @@ const OverviewChart: React.FC<Props> = ({ data }) => {
     <ResponsiveContainer width="100%" height={240}>
       {data && data.length > 0 ? (
         <LineChart data={data}>
-          <XAxis dataKey="day" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+          <XAxis
+            tickFormatter={(value) => locales[`day_${value}` as keyof typeof locales]}
+            dataKey="day"
+            stroke="#888888"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+          />
           <YAxis
             stroke="#888888"
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `$${value}`}
+            tickFormatter={(value) => formatNumber(value)}
           />
           <Tooltip
             animationDuration={100}
+            labelFormatter={(value: keyof typeof locales) => locales[value]}
+            formatter={(value, name: keyof typeof locales) => [formatNumber(value as number), locales[name]]}
+            wrapperClassName="rounded-lg"
             contentStyle={{
               backgroundColor: 'hsl(var(--background)/0.8)',
-              borderRadius: '1em',
               border: '1px solid hsl(var(--foreground)/0.1)',
               backdropFilter: 'blur(4px)',
             }}

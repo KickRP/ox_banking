@@ -1,27 +1,28 @@
+import { Config, LoadJsonFile, Locale } from '@common/.';
+import { OxAccountPermissions, OxAccountRole } from '@overextended/ox_core';
+import { cache, getLocales, hideTextUI, requestAnimDict, sleep, waitFor } from '@overextended/ox_lib/client';
 import type { Character } from '../common/typings';
-import targets from '../../data/targets.json';
-import locations from '../../data/locations.json';
-import atms from '../../data/atms.json';
-import { SendTypedNUIMessage, serverNuiCallback } from 'utils';
-import { getLocales } from '@overextended/ox_lib/shared';
-import { OxAccountPermissions, OxAccountRoles } from '@overextended/ox_core';
+import { SendTypedNUIMessage, serverNuiCallback } from './utils';
 
-const usingTarget = GetConvarInt('ox_banking:target', 0) === 1;
 let hasLoadedUi = false;
 let isUiOpen = false;
 let isATMopen = false;
 
-function initUI() {
+function canOpenUi() {
+  return IsPedOnFoot(cache.ped);
+}
+
+function setupUi() {
   if (hasLoadedUi) return;
 
-  const accountRoles: OxAccountRoles[] = GlobalState.accountRoles;
-
-  // @ts-expect-error
-  const permissions: Record<OxAccountRoles, OxAccountPermissions> = {};
-
-  accountRoles.forEach((role) => {
-    permissions[role] = GlobalState[`accountRole.${role}`] as OxAccountPermissions;
-  });
+  const accountRoles: OxAccountRole[] = GlobalState.accountRoles;
+  const permissions = accountRoles.reduce(
+    (acc, role) => {
+      acc[role] = GlobalState[`accountRole.${role}`] as OxAccountPermissions;
+      return acc;
+    },
+    {} as Record<OxAccountRole, OxAccountPermissions>
+  );
 
   SendNUIMessage({
     action: 'setInitData',
@@ -34,94 +35,115 @@ function initUI() {
   hasLoadedUi = true;
 }
 
-const openATM = () => {
-  initUI();
+const openAtm = async ({ entity }: { entity: number }) => {
+  if (!canOpenUi) return;
+
+  const atmEnter = await requestAnimDict('mini@atmenter');
+  const [x, y, z] = GetOffsetFromEntityInWorldCoords(entity, 0, -0.7, 1);
+  const heading = GetEntityHeading(entity);
+  const sequence = OpenSequenceTask(0) as unknown as number;
+
+  TaskGoStraightToCoord(0, x, y, z, 1.0, 5000, heading, 0.25);
+  TaskPlayAnim(0, atmEnter, 'enter', 4.0, -2.0, 1600, 0, 0.0, false, false, false);
+  CloseSequenceTask(sequence);
+  TaskPerformSequence(cache.ped, sequence);
+  ClearSequenceTask(sequence);
+  setupUi();
+
+  await sleep(0);
+  await waitFor(() => GetSequenceProgress(cache.ped) === -1 || undefined, '', false);
+
+  PlaySoundFrontend(-1, 'PIN_BUTTON', 'ATM_SOUNDS', true);
 
   isUiOpen = true;
   isATMopen = true;
 
   SendTypedNUIMessage('openATM', null);
   SetNuiFocus(true, true);
+  RemoveAnimDict(atmEnter);
 };
 
-exports('openATM', openATM);
+exports('openAtm', openAtm);
 
 const openBank = () => {
-  initUI();
+  if (!canOpenUi) return;
+
+  setupUi();
 
   const playerCash: number = exports.ox_inventory.GetItemCount('money');
   isUiOpen = true;
+
+  hideTextUI();
 
   SendTypedNUIMessage<Character>('openBank', { cash: playerCash });
   SetNuiFocus(true, true);
 };
 
 exports('openBank', openBank);
+AddTextEntry('ox_banking_bank', Locale('bank'));
 
-const createBankBlip = (coords: number[]) => {
-  const blip = AddBlipForCoord(coords[0], coords[1], coords[2]);
-  SetBlipSprite(blip, 207);
-  SetBlipColour(blip, 2);
+const createBankBlip = ([x, y, z]: number[]) => {
+  const { sprite, colour, scale } = Config.BankBlip;
+
+  if (!sprite) return;
+
+  const blip = AddBlipForCoord(x, y, z);
+  SetBlipSprite(blip, sprite);
+  SetBlipColour(blip, colour);
+  SetBlipScale(blip, scale);
   SetBlipAsShortRange(blip, true);
-  BeginTextCommandSetBlipName('STRING');
-  AddTextComponentString('Bank');
+  BeginTextCommandSetBlipName('ox_banking_bank');
   EndTextCommandSetBlipName(blip);
 };
 
-if (!usingTarget) {
-  for (let i = 0; i < locations.length; i++) createBankBlip(locations[i]);
-}
+const banks = LoadJsonFile<typeof import('~/data/banks.json')>('data/banks.json');
 
-if (usingTarget) {
-  exports.ox_target.addModel(
-    atms.map((value) => GetHashKey(value)),
-    {
-      name: 'access_atm',
-      icon: 'fa-solid fa-money-check',
-      label: 'Access ATM',
-      onSelect: () => {
-        openATM();
-      },
-    }
-  );
+if (Config.UseOxTarget) {
+  const atms = LoadJsonFile<typeof import('~/data/atms.json')>('data/atms.json').map((value) => GetHashKey(value));
 
-  for (let i = 0; i < targets.length; i++) {
-    const target = targets[i];
+  const atmOptions = {
+    name: 'access_atm',
+    icon: 'fa-solid fa-money-check',
+    label: Locale('target_access_atm'),
+    export: 'openAtm',
+    distance: 1.3,
+  };
 
+  const bankOptions = {
+    name: 'access_bank',
+    icon: 'fa-solid fa-dollar-sign',
+    label: Locale('target_access_bank'),
+    export: 'openBank',
+    distance: 1.3,
+  };
+
+  exports.ox_target.addModel(atms, atmOptions);
+
+  banks.forEach((bank) => {
     exports.ox_target.addBoxZone({
-      coords: target.coords,
-      size: target.size,
-      rotation: target.rotation,
-      debug: true,
-      interactionDistance: 1.3,
+      coords: bank.coords,
+      size: bank.size,
+      rotation: bank.rotation,
       drawSprite: true,
-      options: [
-        {
-          name: 'access_bank',
-          icon: 'fa-solid fa-dollar-sign',
-          label: 'Access bank',
-          onSelect: () => {
-            openBank();
-          },
-        },
-      ],
+      options: bankOptions,
     });
 
-    createBankBlip(target.coords);
-  }
-}
+    createBankBlip(bank.coords);
+  });
+} else banks.forEach(({ coords }) => createBankBlip(coords));
 
-RegisterNuiCallback('exit', () => {
+RegisterNuiCallback('exit', async (_: any, cb: Function) => {
+  cb(1);
+  SetNuiFocus(false, false);
+
   isUiOpen = false;
   isATMopen = false;
-
-  SetNuiFocus(false, false);
 });
 
 on('ox_inventory:itemCount', (itemName: string, count: number) => {
   if (!isUiOpen || isATMopen || itemName !== 'money') return;
 
-  SendTypedNUIMessage<Character>('openBank', { cash: count });
+  SendTypedNUIMessage<Character>('refreshCharacter', { cash: count });
 });
 
 serverNuiCallback('getDashboardData');
@@ -139,3 +161,5 @@ serverNuiCallback('transferMoney');
 serverNuiCallback('renameAccount');
 serverNuiCallback('convertAccountToShared');
 serverNuiCallback('getLogs');
+serverNuiCallback('getInvoices');
+serverNuiCallback('payInvoice');

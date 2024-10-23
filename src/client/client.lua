@@ -1,7 +1,11 @@
-if GetConvarInt('ox_banking:target', 0) == 1 then return end
+local config = lib.loadJson('data.config')
+
+if config.UseOxTarget then return end
+
+lib.locale()
 
 local function onEnterBank()
-    lib.showTextUI('[E] - Access bank')
+    lib.showTextUI(locale('text_ui_access_bank'))
 end
 
 local function onExitBank()
@@ -14,24 +18,22 @@ local function insideBank()
     end
 end
 
-local locations = lib.loadJson('data.locations')
-
-for i = 1, #locations do
+lib.array.forEach(lib.loadJson('data.banks'), function(bank)
     lib.points.new({
-        coords = locations[i],
+        coords = bank.coords,
         distance = 1.5,
         onEnter = onEnterBank,
         onExit = onExitBank,
         nearby = insideBank
     })
-end
+end)
 
 local atms = lib.loadJson('data.atms')
 
 for i = 1, #atms do atms[i] = GetHashKey(atms[i]) end
 
 local function findClosestAtm()
-    if IsNuiFocused() or IsPauseMenuActive() then return end
+    if IsNuiFocused() or IsPauseMenuActive() or not IsPedOnFoot(cache.ped) then return end
 
     local x, y, z = cache.coords.x, cache.coords.y, cache.coords.z
 
@@ -41,11 +43,13 @@ local function findClosestAtm()
         if atm > 0 then
             local atmCoords = GetEntityCoords(atm)
 
-            lib.showTextUI('[E] - Access ATM')
+            lib.showTextUI(locale('text_ui_access_atm'))
 
             while #(GetEntityCoords(cache.ped) - atmCoords) <= 1.5 and not IsNuiFocused() and not IsPauseMenuActive() do
                 if IsControlJustPressed(0, 38) then
-                    exports.ox_banking.openATM()
+                    exports.ox_banking:openAtm({
+                        entity = atm,
+                    })
                 end
 
                 Wait(0)

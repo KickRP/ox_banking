@@ -1,15 +1,15 @@
-import React from 'react';
-import BaseCard from '../../bank/components/BaseCard';
-import { Settings2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import SpinningLoader from '@/components/SpinningLoader';
+import { Button } from '@/components/ui/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import locales from '@/locales';
-import { z } from 'zod';
 import { Account } from '@/typings';
-import { FormField, FormLabel, FormControl, FormDescription, FormMessage, FormItem, Form } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Settings2 } from 'lucide-react';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import BaseCard from '../../bank/components/BaseCard';
 
 interface Props {
   isWithdrawing: boolean;
@@ -17,28 +17,34 @@ interface Props {
   account: Account;
 }
 
-const formSchema = z.object({
-  amount: z.number({ coerce: true, message: locales.amount_required_number }).min(1),
-});
-
 const CustomWithdrawAmount: React.FC<Props> = ({ isWithdrawing, handleWithdraw, account }) => {
+  const formSchema = React.useMemo(() => z.object({
+    amount: z
+      .number({ coerce: true, message: locales.amount_required_number })
+      .min(1, { message: locales.amount_greater_than_zero })
+      .max(account?.balance ?? 0, { message: locales.amount_greater_than_balance }),
+  }), [account?.balance]);
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      amount: '',
+      amount: 0,
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const { amount } = values;
-
-    if (amount > (account?.balance ?? 0)) {
-      form.setError('amount', { message: locales.amount_greater_than_balance });
-      return;
-    }
+    if (!amount) return;
 
     handleWithdraw(amount);
   }
+
+  React.useEffect(() => {
+    if (form.formState.errors.amount) {
+      form.clearErrors('amount');
+    }
+  }, [account])
+  
 
   return (
     <BaseCard title={locales.custom_amount} icon={Settings2}>
@@ -49,7 +55,7 @@ const CustomWithdrawAmount: React.FC<Props> = ({ isWithdrawing, handleWithdraw, 
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Amount</FormLabel>
+                <FormLabel>{locales.amount}</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -67,3 +73,4 @@ const CustomWithdrawAmount: React.FC<Props> = ({ isWithdrawing, handleWithdraw, 
 };
 
 export default CustomWithdrawAmount;
+
